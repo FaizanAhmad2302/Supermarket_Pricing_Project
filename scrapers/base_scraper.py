@@ -1,60 +1,78 @@
+"""
+base_scraper.py
+===============
+Abstract base class for all store scrapers in the Supermarket Pricing Project.
+
+Provides:
+  - requests.Session with realistic headers (connection pooling, cookie jar)
+  - Configurable rate-limiting delay
+  - File + console logging
+  - Retry / exponential-backoff helper for HTTP GET requests
+  - Abstract scrape() contract
+
+Subclasses only need to implement scrape() and optionally override close().
+"""
+
+import os
 import time
 import logging
 import random
-import os
 from abc import ABC, abstractmethod
 
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
-from webdriver_manager.chrome import ChromeDriverManager
+import requests
 
 
 class BaseScraper(ABC):
-    """Base class for all store scrapers. Handles browser setup, logging, and page fetching."""
+    """Base class for all store scrapers.
 
-    def __init__(self, store_name: str, delay: float = 3.0):
+    Handles HTTP session setup, logging, rate limiting, and retry logic.
+    """
+
+    def __init__(self, store_name: str, delay: float = 2.0):
         self.store_name = store_name
         self.delay = delay
-        self.setup_logging()
-        self.driver = self._init_driver()
-        self.logger.info(f"{self.store_name} scraper initialized (delay={self.delay}s)")
 
-    def _init_driver(self) -> webdriver.Chrome:
-        """Set up headless Chrome with a realistic user-agent."""
-        options = Options()
-        options.add_argument("--headless=new")
-        options.add_argument("--window-size=1920,1080")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument(
-            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        # --- Logging (file + console) ---
+        self.setup_logging()
+
+        # --- HTTP session with realistic browser headers ---
+        self.session = requests.Session()
+        self.session.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/html, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+        })
+
+        self.logger.info(
+            f"{self.store_name} scraper initialized (delay={self.delay}s)"
         )
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option("useAutomationExtension", False)
-        return webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=options,
-        )
+
+    # ------------------------------------------------------------------ #
+    # Logging                                                             #
+    # ------------------------------------------------------------------ #
 
     def setup_logging(self):
-        """Configure file and console logging."""
-        log_dir = os.path.join(os.path.dirname(__file__), "logs")
+        """Configure dual logging: rotating file + console."""
+        log_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "logs"
+        )
         os.makedirs(log_dir, exist_ok=True)
 
-        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s - %(message)s"
+        )
         self.logger = logging.getLogger(self.store_name)
         self.logger.setLevel(logging.INFO)
 
+        # Avoid duplicate handlers when a scraper is re-instantiated
         if not self.logger.handlers:
             fh = logging.FileHandler(
-                os.path.join(log_dir, f"{self.store_name}.log"), encoding="utf-8"
+                os.path.join(log_dir, f"{self.store_name}.log"),
+                encoding="utf-8",
             )
             fh.setFormatter(formatter)
             self.logger.addHandler(fh)
@@ -63,58 +81,66 @@ class BaseScraper(ABC):
             sh.setFormatter(formatter)
             self.logger.addHandler(sh)
 
-    def fetch_page_selenium(
-        self, url: str, wait_selector: str = "body", max_retries: int = 3
-    ) -> str | None:
-        """
-        Load a page with Selenium and return its rendered HTML.
+    # ------------------------------------------------------------------ #
+    # HTTP helpers                                                        #
+    # ------------------------------------------------------------------ #
 
-        Applies rate limiting before each attempt and exponential backoff on failure.
-        Returns None if all retries are exhausted.
+    def fetch_page(self, url: str, max_retries: int = 3, **kwargs) -> str | None:
+        """
+        GET *url* and return the response text (HTML / JSON string).
+
+        Applies:
+          - rate-limiting delay before each attempt
+          - exponential backoff on failure
+          - up to *max_retries* attempts
+
+        Any extra ``kwargs`` are forwarded to ``session.get()``.
+        Returns ``None`` if every attempt fails.
         """
         for attempt in range(max_retries):
-            # Rate limiting — randomised to avoid detection
-            time.sleep(self.delay + random.uniform(0.5, 2.0))
+            # Rate limiting — randomised to reduce detection risk
+            time.sleep(self.delay + random.uniform(0.3, 1.5))
 
             try:
-                self.logger.info(f"Attempt {attempt + 1}/{max_retries}: {url}")
-                self.driver.get(url)
-
-                # Wait for the target element before reading the DOM
-                WebDriverWait(self.driver, 20).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, wait_selector))
+                self.logger.info(
+                    f"Fetch attempt {attempt + 1}/{max_retries}: {url}"
                 )
+                resp = self.session.get(url, timeout=20, **kwargs)
+                resp.raise_for_status()
+                self.logger.info(
+                    f"OK — {len(resp.text):,} chars, status {resp.status_code}"
+                )
+                return resp.text
 
-                # Scroll to trigger lazy-loaded content
-                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                time.sleep(2)
-
-                self.logger.info(f"OK — {len(self.driver.page_source):,} bytes")
-                return self.driver.page_source
-
-            except TimeoutException:
-                self.logger.warning(f"Timeout on attempt {attempt + 1}: {url}")
-            except WebDriverException as e:
-                self.logger.warning(f"WebDriver error on attempt {attempt + 1}: {e}")
-            except Exception as e:
-                self.logger.error(f"Unexpected error on attempt {attempt + 1}: {e}")
+            except requests.exceptions.RequestException as exc:
+                self.logger.warning(
+                    f"Request failed (attempt {attempt + 1}): {exc}"
+                )
 
             # Exponential backoff before next retry
             if attempt < max_retries - 1:
                 backoff = 2 ** attempt
-                self.logger.info(f"Retrying in {backoff}s...")
+                self.logger.info(f"Retrying in {backoff}s …")
                 time.sleep(backoff)
 
         self.logger.error(f"All {max_retries} attempts failed: {url}")
         return None
 
+    # ------------------------------------------------------------------ #
+    # Abstract interface                                                  #
+    # ------------------------------------------------------------------ #
+
     @abstractmethod
     def scrape(self):
-        """Main scraping entry point. Must be implemented by each store subclass."""
+        """Main scraping entry point — must be implemented by each store."""
         raise NotImplementedError
 
+    # ------------------------------------------------------------------ #
+    # Cleanup                                                             #
+    # ------------------------------------------------------------------ #
+
     def close(self):
-        """Quit the browser and release resources."""
-        if self.driver:
-            self.driver.quit()
-            self.logger.info("Browser closed.")
+        """Close the HTTP session and release resources."""
+        if self.session:
+            self.session.close()
+            self.logger.info("HTTP session closed.")
