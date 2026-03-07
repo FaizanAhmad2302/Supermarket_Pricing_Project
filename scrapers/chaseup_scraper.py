@@ -1,20 +1,4 @@
-"""
-chaseup_scraper.py
-==================
-Scraper for Chase Up Supermarket (www.chaseupgrocery.com).
 
-Uses the Chase Up JSON API directly.
-Note: Chase Up uses the *exact same* white-label e-commerce platform as Imtiaz.
-Therefore, the scraping logic, handling of nested categories, and aggressive 
-502 Bad Gateway rate limit handling are completely identical.
-
-Flow:
-1. menu-section → category tree
-2. extract leaf sub-sections
-3. items-by-subsection → paginated products
-
-Output: data/raw/chaseup_raw.csv  (12-column assignment schema)
-"""
 
 import os
 import re

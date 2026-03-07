@@ -1,24 +1,4 @@
-"""
-alfatah_scraper.py
-==================
-Scraper for Al-Fatah Departmental Store (alfatah.pk).
 
-Al-Fatah uses Shopify as its backend, so we can use the standard
-Shopify JSON API:  /collections/{handle}/products.json?limit=250&page={n}
-
-Each product JSON contains:
-  - title, handle, tags (brand prefixed with "B_"), variants (price, compare_at_price)
-
-City/store differentiation is done via a location_based_availability filter
-passed as a query parameter.
-
-Flow:
-1. Iterate over hardcoded collection handles (discovered from department pages)
-2. For each collection, paginate through /products.json
-3. Extract product data into 12-column CSV
-
-Output: data/raw/alfatah_raw.csv
-"""
 
 import os
 import re
