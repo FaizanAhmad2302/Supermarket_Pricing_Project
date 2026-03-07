@@ -88,10 +88,10 @@ def clean_name_fuzzy(name, brand):
 def phase1_exact(df):
     """Deterministic match on fully stripped name."""
     print("\n[Phase 1] Exact conceptual matching...")
-    df["_exact_key"] = df.apply(lambda r: clean_name_aggressive(r["Product Name"], r["Brand"]), axis=1)
+    df["_exact_key"] = df.apply(lambda r: clean_name_aggressive(r["Product Name"], r["Brand"]) + f"_{r['Quantity']}", axis=1)
     
     # Remove empty keys
-    df.loc[df["_exact_key"] == "", "_exact_key"] = np.nan
+    df.loc[df["_exact_key"].str.startswith("_"), "_exact_key"] = np.nan
     
     match_id = 1
     key_map = {}
@@ -156,9 +156,13 @@ def phase2_matrix_fuzzy(df, next_id, threshold=65):
             # Find all indices holding score >= threshold
             matching_positions = np.where(global_scores >= threshold)[0]
             
-            # Filter matches to those not already assigned, and exclude self
-            cluster_indices = [unmatched_idx[pos] for pos in matching_positions 
-                               if unmatched_idx[pos] not in assigned]
+            # Filter matches to those not already assigned, exclude self, and ENFORCE EXACT same Quantity
+            my_qty = df.loc[u_idx, "Quantity"]
+            cluster_indices = [
+                unmatched_idx[pos] for pos in matching_positions 
+                if unmatched_idx[pos] not in assigned 
+                and df.loc[unmatched_idx[pos], "Quantity"] == my_qty
+            ]
             
             # A cluster must be size 2+
             if len(cluster_indices) >= 2:
