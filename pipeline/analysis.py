@@ -79,6 +79,17 @@ def main():
 
     leaders["LDI"] = leaders["Lowest_Price_Count"] / total_matched_groups
 
+    # === Weighted LDI array & Category-wise LDI ===
+    cat_sizes = df.groupby("Category")["match_id"].nunique().reset_index().rename(columns={"match_id": "Category_Total_Groups"})
+    min_prices_cat = min_prices_per_group.groupby(["Category", "Store"]).size().reset_index(name="Cat_Lowest_Price_Count")
+    cat_ldi = pd.merge(min_prices_cat, cat_sizes, on="Category")
+    cat_ldi["Category_LDI"] = cat_ldi["Cat_Lowest_Price_Count"] / cat_ldi["Category_Total_Groups"]
+    cat_ldi.to_csv(os.path.join(REPORTS_DIR, "3.3_category_wise_LDI.csv"), index=False)
+    
+    cat_ldi["Weighted_Numerator"] = cat_ldi["Category_LDI"] * cat_ldi["Category_Total_Groups"]
+    weighted_ldi = cat_ldi.groupby("Store")["Weighted_Numerator"].sum() / cat_ldi["Category_Total_Groups"].sum()
+    weighted_ldi = weighted_ldi.reset_index().rename(columns={0: "Weighted_LDI"})
+
     # Store Volatility & Average Category Price Index
     store_metrics = df.groupby("Store").agg(
         Avg_Category_Price_Index=("Relative_Price_Index", "mean")
@@ -90,6 +101,8 @@ def main():
     
     store_metrics = pd.merge(store_metrics, volatility, on="Store", how="left")
     store_metrics = pd.merge(store_metrics, leaders, on="Store", how="left").fillna(0)
+    if "Weighted_LDI" in weighted_ldi.columns:
+        store_metrics = pd.merge(store_metrics, weighted_ldi, on="Store", how="left").fillna(0)
 
     # Median price deviation from market average
     df_with_market = pd.merge(df, dispersion[["match_id", "Mean_Price"]], on="match_id")
@@ -121,6 +134,18 @@ def main():
     pivot_df = df.pivot_table(index="match_id", columns="Store", values="Price Per Unit", aggfunc="mean")
     sync_matrix = pivot_df.corr(method="pearson")
     sync_matrix.to_csv(os.path.join(REPORTS_DIR, "3.4_cross_store_sync_matrix.csv"))
+
+    # 4. Correlation between brand tier (premium vs economy) and price volatility
+    cat_median = df.groupby("Category")["Price Per Unit"].median().reset_index().rename(columns={"Price Per Unit": "Category_Median_Price"})
+    df_brand = pd.merge(df, cat_median, on="Category")
+    df_brand["Brand_Tier_Score"] = np.where(df_brand["Price Per Unit"] >= df_brand["Category_Median_Price"], 1, 0)
+    brand_volatility = pd.merge(df_brand[["match_id", "Brand_Tier_Score"]].drop_duplicates(), dispersion[["match_id", "CV"]], on="match_id")
+    correlations["Brand_Tier_vs_Volatility_Corr"] = brand_volatility["Brand_Tier_Score"].corr(brand_volatility["CV"])
+
+    # 5. City-wise price correlation matrix
+    city_pivot = df.pivot_table(index="match_id", columns="City", values="Price Per Unit", aggfunc="mean")
+    city_sync = city_pivot.corr(method="pearson")
+    city_sync.to_csv(os.path.join(REPORTS_DIR, "3.4_city_wise_sync_matrix.csv"))
 
     # Convert dictionary to DataFrame for saving
     corr_df = pd.DataFrame([correlations])
