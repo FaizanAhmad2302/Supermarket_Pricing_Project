@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supermarket Pricing Intelligence</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PapaParse -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="dark-theme">
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <div class="logo-icon"><i class="ri-bar-chart-box-fill"></i></div>
+                <div class="logo-text">Price<span class="highlight">Intel</span></div>
+            </div>
+
+            <nav class="nav-menu">
+                <a href="#section-overview" class="nav-item active" data-target="section-overview">
+                    <i class="ri-dashboard-fill"></i>
+                    <span>Overview</span>
+                </a>
+                <a href="#section-store-metrics" class="nav-item" data-target="section-store-metrics">
+                    <i class="ri-store-2-fill"></i>
+                    <span>Store Metrics</span>
+                </a>
+                <a href="#section-category-ldi" class="nav-item" data-target="section-category-ldi">
+                    <i class="ri-shopping-bag-3-fill"></i>
+                    <span>Category LDI</span>
+                </a>
+                <a href="#section-correlations" class="nav-item" data-target="section-correlations">
+                    <i class="ri-line-chart-fill"></i>
+                    <span>Correlations</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="pulse-status">
+                    <div class="pulse-dot"></div>
+                    <span>Live Pipeline</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="topbar">
+                <div class="page-title">
+                    <h1>Market Overview</h1>
+                    <p class="subtitle">Real-time cross-store pricing analytics</p>
+                </div>
+                <div class="header-actions">
+                    <div class="search-bar">
+                        <i class="ri-search-line"></i>
+                        <input type="text" id="searchInput" placeholder="Search categories...">
+                    </div>
+                    <button class="btn btn-primary" id="exportBtn">
+                        <i class="ri-download-cloud-2-line"></i> Export Report
+                    </button>
+                    <div class="profile-avatar">
+                        <img src="https://ui-avatars.com/api/?name=Admin&background=8b5cf6&color=fff" alt="User">
+                    </div>
+                </div>
+            </header>
+
+            <div class="dashboard-scroll-area">
+
+                <!-- KPI Section -->
+                <div class="kpi-grid" id="section-overview">
+                    <div class="kpi-card glass-panel">
+                        <div class="kpi-icon blue-glow"><i class="ri-medal-fill"></i></div>
+                        <div class="kpi-details">
+                            <h3 class="kpi-title">Pricing Leader</h3>
+                            <div class="kpi-value" id="kpi-leader-name">--</div>
+                            <div class="kpi-trend positive"><i class="ri-arrow-up-line"></i> <span
+                                    id="kpi-leader-ldi">--</span>% LDI</div>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card glass-panel">
+                        <div class="kpi-icon purple-glow"><i class="ri-coupon-3-fill"></i></div>
+                        <div class="kpi-details">
+                            <h3 class="kpi-title">Matched Products</h3>
+                            <div class="kpi-value" id="kpi-total-matched">--</div>
+                            <div class="kpi-trend neutral">Across all categories</div>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card glass-panel">
+                        <div class="kpi-icon green-glow"><i class="ri-swap-box-fill"></i></div>
+                        <div class="kpi-details">
+                            <h3 class="kpi-title">Lowest Volatility</h3>
+                            <div class="kpi-value" id="kpi-lowest-vol">-</div>
+                            <div class="kpi-trend positive"><span id="kpi-lowest-vol-score">--</span> Score</div>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card glass-panel">
+                        <div class="kpi-icon orange-glow"><i class="ri-store-3-fill"></i></div>
+                        <div class="kpi-details">
+                            <h3 class="kpi-title">Active Chains</h3>
+                            <div class="kpi-value" id="kpi-store-count">--</div>
+                            <div class="kpi-trend neutral">Monitored</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Charts Grid -->
+                <div class="charts-grid-main">
+
+                    <!-- LDI Donut -->
+                    <div class="chart-card glass-panel span-1">
+                        <div class="card-header">
+                            <h2>Market Dominance (LDI)</h2>
+                            <div class="card-action"><i class="ri-more-2-fill"></i></div>
+                        </div>
+                        <div class="chart-container donut-container">
+                            <canvas id="ldiDonutChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Store Metrics Multi-Bar -->
+                    <div class="chart-card glass-panel span-2" id="section-store-metrics">
+                        <div class="card-header">
+                            <h2>Price Volatility vs Category Index</h2>
+                            <div class="card-action"><i class="ri-more-2-fill"></i></div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="storeMetricsChart"></canvas>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Secondary Grid -->
+                <div class="charts-grid-secondary">
+
+                    <!-- Category LDI Stacked Bar -->
+                    <div class="chart-card glass-panel span-2" id="section-category-ldi">
+                        <div class="card-header">
+                            <h2>Category-Wise Dominance (Top Categories)</h2>
+                            <div class="card-action"><i class="ri-more-2-fill"></i></div>
+                        </div>
+                        <div class="chart-container category-chart-wrap">
+                            <canvas id="categoryLdiChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Market Correlations List -->
+                    <div class="chart-card glass-panel span-1" style="display: flex; flex-direction: column;"
+                        id="section-correlations">
+                        <div class="card-header">
+                            <h2>Market Correlations</h2>
+                        </div>
+                        <div class="correlations-list" id="correlations-container">
+                            <!-- Populated via JS -->
+                            <div class="loading-spinner"></div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Overlay/Effects -->
+                <div class="ambient-glow glow-1"></div>
+                <div class="ambient-glow glow-2"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Main Logic -->
+    <script src="app.js"></script>
+</body>
+
+</html>
